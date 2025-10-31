@@ -9,24 +9,18 @@ import os
 
 # --- 0. CACHING FOR SPEED (FIXES SLOW LOADING) ---
 
-# @st.cache_resource is used to cache large, expensive resources like ML models
-# This decorator ensures the model only loads ONCE, even when the app reruns.
 @st.cache_resource
 def load_deepface_resource():
-    """Forces the DeepFace model resources to load at startup and caches them."""
-    with st.spinner("Initializing DeepFace Models (This runs only once)..."):
-        # The first analysis call will download and load all necessary models.
-        # We perform a dummy analysis on a blank image to trigger the loading.
+    """Forces the DeepFace model resources to load once at startup and caches them."""
+    with st.spinner("⏳ Initializing DeepFace AI Models (This runs only once)..."):
         try:
-            # Create a simple 1x1 black image array for dummy analysis
+            # We perform a dummy action to trigger model loading and initialization
             dummy_img = np.zeros((1, 1, 3), dtype=np.uint8)
-            
-            # DeepFace.analyze is the main function we need to use later.
-            # We return the library itself to indicate it's ready.
+            # Return the DeepFace library itself, now initialized
             return DeepFace
             
         except Exception as e:
-            st.error(f"Failed to load DeepFace resources: {e}")
+            st.error(f"❌ Failed to load DeepFace resources. Error: {e}")
             return None
 
 # Load the cached resource into a global variable
@@ -77,30 +71,27 @@ MUSIC_MAPPING = {
 
 st.title("🎶 Emotion-Based Music Recommender")
 st.markdown("### Telugu Songs Edition")
-st.markdown("Click **'Take a picture to analyze your emotion'** below to capture your current emotion and get a personalized music recommendation.")
+st.markdown("Click **'Analyze My Mood'** below to capture your current emotion and get a personalized music recommendation.")
 
 col1, col2 = st.columns([1, 1])
 
-# Use the 'container_width' parameter to fix the deprecated warning
 with col1:
     st.markdown("### 📸 Live Camera Capture")
+    # st.camera_input returns the image data after the user clicks "Take Photo"
     camera_image = st.camera_input("Analyze My Mood")
 
 
 # --- 3. CORE LOGIC (DEEPFACE ANALYSIS) ---
 
 if camera_image is not None and DEEPFACE_READY is not None:
-    # Display the captured image in the first column (Fixed deprecated warning)
+    
+    # Display the captured image in the first column (Using corrected parameter)
     with col1:
-        # NOTE: The Streamlit warning is about st.image, not st.camera_input
-        st.image(camera_image, caption="Captured Image", use_container_width=True) # FIXED: use_container_width=True
+        st.image(camera_image, caption="Captured Image", use_container_width=True) 
 
-    # 1. Convert the image to a format DeepFace can read (numpy array)
+    # 1. Convert the image for DeepFace
     try:
-        # Read the image content as bytes
         image_bytes = camera_image.getvalue()
-        
-        # Convert bytes to numpy array for OpenCV/DeepFace
         img_array = np.frombuffer(image_bytes, np.uint8)
         img_array = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
         img_array = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
@@ -110,20 +101,17 @@ if camera_image is not None and DEEPFACE_READY is not None:
             analysis_results = DEEPFACE_READY.analyze(
                 img_path=img_array,
                 actions=['emotion'],
-                enforce_detection=False # Set to False to try and detect face even if partial
+                enforce_detection=False # Allows analysis even if detection is slightly difficult
             )
             time.sleep(0.5) # Small visual pause
             
-        # DeepFace returns a list of results (one for each detected face).
+        # Extract the dominant emotion
         if analysis_results and isinstance(analysis_results, list) and analysis_results[0].get('dominant_emotion'):
             
-            # Get the emotion with the highest probability
             dominant_emotion = analysis_results[0]['dominant_emotion'].lower()
-            
-            # 3. Get the music recommendation from the map
             recommendation = MUSIC_MAPPING.get(dominant_emotion, MUSIC_MAPPING["neutral"])
             
-            # 4. Display results in the second column
+            # 3. Display results in the second column
             with col2:
                 st.markdown("### ✅ Analysis Result")
                 st.success(f"**Your Detected Mood:** {dominant_emotion.upper()}!")
@@ -143,16 +131,22 @@ if camera_image is not None and DEEPFACE_READY is not None:
                     unsafe_allow_html=True
                 )
                 
-                if st.button("▶️ Listen Now on YouTube", type="primary"):
-                    webbrowser.open_new_tab(recommendation['url'])
-                    st.toast('Opening music in a new tab...', icon='🎶')
-        
+                # --- FINAL FIX: USE st.link_button for non-blocking direct URL open ---
+                st.link_button(
+                    label="▶️ Open YouTube Playlist Now",
+                    url=recommendation['url'], # This uses the URL directly as an HTML link
+                    type="primary"
+                )
+                
+                # Optional message to explain browser behavior
+                st.info('The playlist should open directly in a new tab.')
+
+
         else:
             with col2:
                  st.error("❌ No face detected. Please ensure your face is clearly visible and centered in the frame, and try again.")
 
     except Exception as e:
         with col2:
-            st.error(f"An unexpected error occurred during analysis. Try reloading the page. Error: {e}")
-
-# --- End of app.py ---
+            st.error(f"An unexpected error occurred during analysis. Error: {e}")
+            st.code(e) # Display the error in the app for quick debugging
